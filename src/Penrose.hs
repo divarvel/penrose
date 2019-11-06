@@ -169,46 +169,39 @@ get matrix Coords{..} =
 isEmpty :: TriangleBeams Bool -> Bool
 isEmpty bs = bs == (getAny <$> mempty)
 
+getSummits :: TriangleBeams Bool
+           -> TriangleBeams Bool
+           -> TriangleBeams Bool
+           -> SummitBeams Bool
+getSummits a b c = SummitBeams
+  { n  = a & ns
+  , ne = a & swe
+  , se = b & nwe
+  , s  = b & ns
+  , sw = c & swe
+  , nw = c & nwe
+  }
 getNorthSummits :: TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> SummitBeams Bool
-getNorthSummits current above topLeft = SummitBeams
-  { n  = above & ns
-  , ne = above & swe
-  , se = current & nwe
-  , s  = current & ns
-  , sw = topLeft & swe
-  , nw = topLeft & nwe
-  }
+getNorthSummits current above topLeft = getSummits above current topLeft
 
 getSouthSummits :: TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> SummitBeams Bool
-getSouthSummits current below bottomLeft | isEmpty below = SummitBeams
-  { n  = current & ns
-  , ne = current & swe
-  , se = below & nwe
-  , s  = below & ns
-  , sw = bottomLeft & swe
-  , nw = bottomLeft & nwe
-  }
-                                         | otherwise = getAny <$> mempty
+getSouthSummits current below bottomLeft
+  | isEmpty below = getSummits current below bottomLeft
+  | otherwise     = getAny <$> mempty
 
 getEastSummits :: TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> TriangleBeams Bool
                 -> SummitBeams Bool
-getEastSummits current topRight bottomRight | isEmpty bottomRight = SummitBeams
-  { n  = topRight & ns
-  , ne = topRight & swe
-  , se = bottomRight & nwe
-  , s  = bottomRight & ns
-  , sw = current & swe
-  , nw = current & nwe
-  }
-                                            | otherwise = getAny <$> mempty
+getEastSummits current topRight bottomRight
+  | isEmpty bottomRight = getSummits topRight bottomRight current
+  | otherwise           = getAny <$> mempty
 
 getTriangleAt :: Matrix -> Coords -> [Line]
 getTriangleAt matrix cs@Coords{..} =
