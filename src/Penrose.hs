@@ -61,16 +61,21 @@ instance Semigroup m => Semigroup (SummitBeams m) where
 instance Monoid m => Monoid (SummitBeams m) where
     mempty = SummitBeams mempty mempty mempty mempty mempty mempty
 
-
 w, hw, ww, hww :: Int
 w = 2*hw
+-- ^ the width of a bar
 hw = 5
+-- ^ half the width of a bar. This allows us to only work with ints
 ww = 2*hww
+-- ^ the width of a pattern (the height of a triangle).
 hww = 25
+-- ^ half the width of a pattern. This allows us to only work with ints
 
+-- | Helper for compact input of a line
 l :: (Point, Point) -> Line
 l = uncurry Line
 
+-- | Helper for compact input of a point
 p :: (Int, Int) -> Point
 p = uncurry Point
 
