@@ -7,7 +7,6 @@ import           Data.Bool     (bool)
 import           Data.Coerce   (coerce)
 import           Data.Function ((&))
 import           Data.Monoid   (Any (..))
-import           Debug.Trace
 import           System.Random
 
 data Point = Point { x :: Int, y :: Int}
@@ -229,7 +228,7 @@ getTriangleAt matrix cs@Coords{..} =
       north = getNorthSummits current above topLeft
       south = getSouthSummits current below bottomLeft
       east  = getEastSummits  current topRight bottomRight
-  in traceShow (cs, Coords (cx -1) top) $ getTriangle current north south east
+  in getTriangle current north south east
 
 getMatrix :: Matrix -> [Line]
 getMatrix matrix = do
