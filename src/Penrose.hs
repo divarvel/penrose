@@ -1,19 +1,61 @@
 {-# LANGUAGE DeriveFunctor   #-}
+{-# LANGUAGE DeriveGeneric   #-}
+{-# LANGUAGE DerivingVia     #-}
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE RecordWildCards #-}
 module Penrose where
 
-import           Control.Monad (join)
-import           Data.Bool     (bool)
-import           Data.Coerce   (coerce)
-import           Data.Function ((&))
-import           Data.Monoid   (Any (..))
+import           Control.Monad       (join)
+import           Data.Bool           (bool)
+import           Data.Coerce         (coerce)
+import           Data.Function       ((&))
+import           Data.Monoid         (Any (..), Sum (..))
+import           Data.Monoid.Generic
+import           Data.Ratio
+import           GHC.Generics        (Generic)
 import           System.Random
 
-data Point = Point { x :: Int, y :: Int}
-  deriving (Eq, Show)
+data SVGConfig = SVGConfig
+  { halfBar     :: Int
+  , halfPattern :: Int
+  }
 
-instance Semigroup Point where
-  (Point x y) <> (Point x' y') = Point (x + x') (y + y')
+data PointCoord = PointC { _hw :: Sum Int, _hW :: Sum Int }
+  deriving (Generic, Eq)
+  deriving Semigroup via GenericSemigroup PointCoord
+  deriving Monoid via GenericMonoid PointCoord
+
+toTuple PointC{..} = (_hw, _hW)
+
+instance Show PointCoord where
+  show = \case
+      0              -> "0"
+      PointC _hw 0   -> showRational _hw "w"
+      PointC 0 _hW   -> showRational _hW "W"
+      PointC _hw _hW -> showRational _hw "w" <> "+" <> showRational _hW "W"
+    where
+      showRational 2 mult       = mult
+      showRational (Sum x) mult =
+        let r = x % 2
+            n = numerator r
+            d = denominator r
+         in bool (show n <> "/2") (show n) (d == 1) <> "*" <> mult
+
+instance Num PointCoord where
+ (+) = (<>)
+ (PointC _hw _hW) * (PointC _hw' _hW') = PointC (_hw * _hw') (_hW * _hW')
+ abs PointC{..} = PointC (abs _hw) (abs _hW)
+ signum PointC{..} = PointC (signum _hw) (signum _hW)
+ fromInteger n = PointC (fromIntegral n) (fromIntegral n)
+ negate PointC{..} = PointC (negate _hw) (negate _hW)
+
+(*:) :: Int -> PointCoord -> PointCoord
+n *: p = fromIntegral n * p
+
+data Point = Point { x :: PointCoord, y :: PointCoord }
+  deriving (Generic, Eq, Show)
+  deriving Semigroup via GenericSemigroup Point
+  deriving Monoid via GenericMonoid Point
 
 data Line = Line { start :: Point, end :: Point }
 
@@ -61,14 +103,14 @@ instance Semigroup m => Semigroup (SummitBeams m) where
 instance Monoid m => Monoid (SummitBeams m) where
     mempty = SummitBeams mempty mempty mempty mempty mempty mempty
 
-w, hw, ww, hww :: Int
-w = 2*hw
+w, hw, ww, hww :: PointCoord
+w = PointC 2 0
 -- ^ the width of a bar
-hw = 5
+hw = PointC 1 0
 -- ^ half the width of a bar. This allows us to only work with ints
-ww = 2*hww
+ww = PointC 0 2
 -- ^ the width of a pattern (the height of a triangle).
-hww = 25
+hww = PointC 0 1
 -- ^ half the width of a pattern. This allows us to only work with ints
 
 -- | Helper for compact input of a line
@@ -76,7 +118,7 @@ l :: (Point, Point) -> Line
 l = uncurry Line
 
 -- | Helper for compact input of a point
-p :: (Int, Int) -> Point
+p :: (PointCoord, PointCoord) -> Point
 p = uncurry Point
 
 beams :: TriangleBeams [Line]
@@ -107,30 +149,33 @@ boundaries :: SummitBeams Bool -> [Line]
 boundaries SummitBeams{..} =
   let keep = map fst . filter snd
   in keep [
-            {-01-} (l(p(-2*w,0),p(-w,-hw)),   sw)
-          , {-02-} (l(p(-2*w,0),p(-w, hw)),   nw && not sw)
-          , {-03-} (l(p(-w,-3*hw),p(-w,-hw)), n)
-          , {-04-} (l(p(-w,-hw),p(-w,hw)),    not sw && not nw && (n||s||se||ne))
-          , {-05-} (l(p(-w,hw),p(-w,3*hw)),   s && not sw)
-          , {-06-} (l(p(-w,-3*hw),p(0,-w)),   nw && not n)
-          , {-07-} (l(p(-w,-hw),p(0,-w)),     not n && not nw && (ne||sw||s||se))
-          , {-08-} (l(p(0,0),p(-w,-hw)),      (n&&sw) || (not n && not sw && (se||ne||nw||s)))
-          , {-09-} (l(p(-w,hw),p(0,0)),       sw)
-          , {-10-} (l(p(-w,hw),p(0,w)),       not sw && not s && (nw||se||n||ne))
-          , {-11-} (l(p(-w,3*hw),p(0,w)),     sw)
-          , {-12-} (l(p(0,-w),p(0,0)),        n)
-          , {-13-} (l(p(0,0),p(0,w)),         (not sw||se) && (not se||sw) && (n||s||sw||nw||se||ne))
-          , {-14-} (l(p(0,-w),p(w,-3*hw)),    not n && ne)
-          , {-15-} (l(p(0,-w),p(w,-hw)),      not n && not ne && (nw||sw||se||s))
-          , {-16-} (l(p(0,0),p(w,-hw)),       (n&&se) || (not n && not se && (sw||ne||nw||s)))
+          -- SE
+            {-13-} (l(p(0,0),p(0,w)),         (not sw||se) && (not se||sw) && (n||s||sw||nw||se||ne))
           , {-17-} (l(p(0,0),p(w,hw)),        se)
           , {-18-} (l(p(0,w),p(w,hw)),        (n||nw||sw||ne)&&not s&&not se)
           , {-19-} (l(p(0,w),p(w,3*hw)),      se)
-          , {-20-} (l(p(w,-3*hw),p(w,-hw)),   n)
           , {-21-} (l(p(w,-hw),p(w,hw)),      (n||s||sw||nw)&&not se&&not ne)
           , {-22-} (l(p(w,hw),p(w,3*hw)),     s && not se)
           , {-23-} (l(p(w,-hw),p(2*w,0)),     se)
           , {-24-} (l(p(w,hw),p(2*w,0)),      ne && not se)
+          -- N
+          , {-16-} (l(p(0,0),p(w,-hw)),       (n&&se) || (not n && not se && (sw||ne||nw||s)))
+          , {-12-} (l(p(0,-w),p(0,0)),        n)
+          , {-15-} (l(p(0,-w),p(w,-hw)),      not n && not ne && (nw||sw||se||s))
+          , {-20-} (l(p(w,-3*hw),p(w,-hw)),   n)
+          , {-07-} (l(p(-w,-hw),p(0,-w)),     not n && not nw && (ne||sw||s||se))
+          , {-14-} (l(p(0,-w),p(w,-3*hw)),    not n && ne)
+          , {-03-} (l(p(-w,-3*hw),p(-w,-hw)), n)
+          , {-06-} (l(p(-w,-3*hw),p(0,-w)),   nw && not n)
+          -- SW
+          , {-08-} (l(p(0,0),p(-w,-hw)),      (n&&sw) || (not n && not sw && (se||ne||nw||s)))
+          , {-09-} (l(p(-w,hw),p(0,0)),       sw)
+          , {-04-} (l(p(-w,-hw),p(-w,hw)),    not sw && not nw && (n||s||se||ne))
+          , {-01-} (l(p(-2*w,0),p(-w,-hw)),   sw)
+          , {-10-} (l(p(-w,hw),p(0,w)),       not sw && not s && (nw||se||n||ne))
+          , {-02-} (l(p(-2*w,0),p(-w, hw)),   nw && not sw)
+          , {-11-} (l(p(-w,3*hw),p(0,w)),     sw)
+          , {-05-} (l(p(-w,hw),p(-w,3*hw)),   s && not sw)
           ]
 
 toSouth :: Point -> Point
@@ -235,27 +280,31 @@ getMatrix matrix = do
   cx  <- [0 .. length row - 1]
   let coords = Coords{..}
   let even = cx `mod` 2 == 0
-  let offset = Point { x = cx * ww
-                     , y = cy * ww + bool hww 0 even }
+  let offset = Point { x = cx *: ww
+                     , y = cy *: ww + bool hww 0 even }
   let lines = getTriangleAt matrix coords
   move (<> offset) <$> lines
 
-getSVG :: (Int,Int) -> [Line] -> String
-getSVG (width, height) lines =
+defaultSVGConfig :: SVGConfig
+defaultSVGConfig = SVGConfig 5 40
+
+getSVG :: SVGConfig -> (PointCoord,PointCoord) -> [Line] -> String
+getSVG SVGConfig{..} (width, height) lines =
   let path = foldMap (toPathElement . move (<> Point w w)) lines
-      toPathElement Line{..} = "M " <> show (x start) <> " "
-                                    <> show (y start) <> " "
-                            <> "L " <> show (x end) <> " "
-                                    <> show (y end) <> " "
-  in "<svg width=\""<> show width <> "\" height=\""<> show height <> "\" xmlns=\"http://www.w3.org/2000/svg\">\
+      toCoord PointC{..} = show . getSum $ _hw * Sum halfBar + _hW * Sum halfPattern
+      toPathElement Line{..} = "M " <> toCoord (x start) <> " "
+                                    <> toCoord (y start) <> " "
+                            <> "L " <> toCoord (x end) <> " "
+                                    <> toCoord (y end) <> " "
+  in "<svg width=\""<> toCoord width <> "\" height=\""<> toCoord height <> "\" xmlns=\"http://www.w3.org/2000/svg\">\
   \<path d=\"" <> path <> "\" fill=\"transparent\" stroke=\"black\"></path>\
   \</svg>"
 
 renderMatrix :: [[Int]] -> String
 renderMatrix rawMatrix =
-  let height = 2*w + hww + length rawMatrix * ww
-      width = 2*w + maximum (length <$> rawMatrix) * ww
-  in getSVG (width, height) . getMatrix . fmap (fmap readBeams) $ rawMatrix
+  let height = 2 * w + hww + length rawMatrix *: ww
+      width = 2 * w + maximum (length <$> rawMatrix) *: ww
+  in getSVG defaultSVGConfig (width, height) . getMatrix . fmap (fmap readBeams) $ rawMatrix
 
 data Mode = Full | Random deriving Read
 
