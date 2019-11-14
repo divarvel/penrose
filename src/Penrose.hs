@@ -69,14 +69,9 @@ data TriangleBeams a
   , nwe :: a
   , swe :: a
   }
-  deriving (Eq, Show, Functor)
-
-instance Semigroup m => Semigroup (TriangleBeams m) where
-    TriangleBeams{..} <> (TriangleBeams ns' nwe' swe') =
-        TriangleBeams (ns <> ns') (nwe <> nwe') (swe <> swe')
-
-instance Monoid m => Monoid (TriangleBeams m) where
-    mempty = TriangleBeams mempty mempty mempty
+  deriving (Generic, Eq, Show, Functor)
+  deriving Semigroup via (GenericSemigroup (TriangleBeams a))
+  deriving Monoid via (GenericMonoid (TriangleBeams a))
 
 data SummitBeams a
   = SummitBeams
@@ -87,21 +82,9 @@ data SummitBeams a
   , sw :: a
   , nw :: a
   }
-  deriving (Eq, Show, Functor)
-
-instance Semigroup m => Semigroup (SummitBeams m) where
-    l <> r =
-        SummitBeams
-          { n  = n  l <> n r
-          , ne = ne l <> ne r
-          , se = se l <> se r
-          , s  = s  l <> s r
-          , sw = sw l <> sw r
-          , nw = nw l <> nw r
-          }
-
-instance Monoid m => Monoid (SummitBeams m) where
-    mempty = SummitBeams mempty mempty mempty mempty mempty mempty
+  deriving (Generic, Eq, Show, Functor)
+  deriving Semigroup via (GenericSemigroup (SummitBeams a))
+  deriving Monoid via (GenericMonoid (SummitBeams a))
 
 w, hw, ww, hww :: PointCoord
 w = PointC 2 0
