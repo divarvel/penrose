@@ -133,7 +133,7 @@ boundaries SummitBeams{..} =
   let keep = map fst . filter snd
   in keep [
           -- SE
-            {-13-} (l(p(0,0),p(0,w)),         (not sw||se) && (not se||sw) && (n||s||sw||nw||se||ne))
+            {-13-} (l(p(0,0),p(0,w)),         (sw&&se) || (not se && not sw && (n||s||nw||ne)))
           , {-17-} (l(p(0,0),p(w,hw)),        se)
           , {-18-} (l(p(0,w),p(w,hw)),        (n||nw||sw||ne)&&not s&&not se)
           , {-19-} (l(p(0,w),p(w,3*hw)),      se)
