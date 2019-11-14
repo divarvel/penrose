@@ -294,3 +294,12 @@ data Mode = Full | Random deriving Read
 genMatrix :: Mode -> Int -> Int -> IO [[Int]]
 genMatrix Full w h = pure . replicate h . replicate w $ 7
 genMatrix Random w h = traverse (const $ traverse (const $ randomRIO (0,7)) [1..w]) [1..h]
+
+renderPattern :: [Line]
+renderPattern =
+  let bs = boundaries' $ SummitBeams False False True True False False
+      center = move (<> p(ww, ww))
+   in center <$> bs
+              -- <> (move rotate <$> bs)
+              <> (move (rotate . rotate) <$> bs)
+
