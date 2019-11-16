@@ -52,12 +52,23 @@ instance Num PointCoord where
 (*:) :: Int -> PointCoord -> PointCoord
 n *: p = fromIntegral n * p
 
-data Point = Point { x :: PointCoord, y :: PointCoord }
-  deriving (Generic, Eq, Show)
-  deriving Semigroup via GenericSemigroup Point
-  deriving Monoid via GenericMonoid Point
+-- | Generic point type, that can work in different
+-- coordinate systems
+data GPoint c = Point { x :: c, y :: c}
+  deriving (Generic, Eq, Show, Functor)
+  deriving Semigroup via GenericSemigroup (GPoint c)
+  deriving Monoid via GenericMonoid (GPoint c)
 
-data Line = Line { start :: Point, end :: Point }
+-- | Point in the (x,y) coordinate system
+type Point  = GPoint PointCoord
+-- | Point in the (NW,S) coordinate system
+type Point' = GPoint Int
+
+data GLine p = Line { start :: p, end :: p }
+  deriving Functor
+
+type Line  = GLine Point
+type Line' = GLine Point'
 
 type Matrix = [[TriangleBeams Bool]]
 data Coords = Coords { cx :: Int, cy :: Int }
@@ -97,11 +108,11 @@ hww = PointC 0 1
 -- ^ half the width of a pattern. This allows us to only work with ints
 
 -- | Helper for compact input of a line
-l :: (Point, Point) -> Line
+l :: (p, p) -> GLine p
 l = uncurry Line
 
 -- | Helper for compact input of a point
-p :: (PointCoord, PointCoord) -> Point
+p :: (c, c) -> GPoint c
 p = uncurry Point
 
 beams :: TriangleBeams [Line]
@@ -128,38 +139,51 @@ getBeamsLines (TriangleBeams ns' nwe' swe') =
           , filter (const swe') swe
           ]
 
-boundaries :: SummitBeams Bool -> [Line]
-boundaries SummitBeams{..} =
+boundaries' :: SummitBeams Bool -> [Line']
+boundaries' SummitBeams{..} =
   let keep = map fst . filter snd
   in keep [
           -- SE
-            {-13-} (l(p(0,0),p(0,w)),         (sw&&se) || (not se && not sw && (n||s||nw||ne)))
-          , {-17-} (l(p(0,0),p(w,hw)),        se)
-          , {-18-} (l(p(0,w),p(w,hw)),        (n||nw||sw||ne)&&not s&&not se)
-          , {-19-} (l(p(0,w),p(w,3*hw)),      se)
-          , {-21-} (l(p(w,-hw),p(w,hw)),      (n||s||sw||nw)&&not se&&not ne)
-          , {-22-} (l(p(w,hw),p(w,3*hw)),     s && not se)
-          , {-23-} (l(p(w,-hw),p(2*w,0)),     se)
-          , {-24-} (l(p(w,hw),p(2*w,0)),      ne && not se)
-          -- N
-          , {-16-} (l(p(0,0),p(w,-hw)),       (n&&se) || (not n && not se && (sw||ne||nw||s)))
-          , {-12-} (l(p(0,-w),p(0,0)),        n)
-          , {-15-} (l(p(0,-w),p(w,-hw)),      not n && not ne && (nw||sw||se||s))
-          , {-20-} (l(p(w,-3*hw),p(w,-hw)),   n)
-          , {-07-} (l(p(-w,-hw),p(0,-w)),     not n && not nw && (ne||sw||s||se))
-          , {-14-} (l(p(0,-w),p(w,-3*hw)),    not n && ne)
-          , {-03-} (l(p(-w,-3*hw),p(-w,-hw)), n)
-          , {-06-} (l(p(-w,-3*hw),p(0,-w)),   nw && not n)
-          -- SW
-          , {-08-} (l(p(0,0),p(-w,-hw)),      (n&&sw) || (not n && not sw && (se||ne||nw||s)))
-          , {-09-} (l(p(-w,hw),p(0,0)),       sw)
-          , {-04-} (l(p(-w,-hw),p(-w,hw)),    not sw && not nw && (n||s||se||ne))
-          , {-01-} (l(p(-2*w,0),p(-w,-hw)),   sw)
-          , {-10-} (l(p(-w,hw),p(0,w)),       not sw && not s && (nw||se||n||ne))
-          , {-02-} (l(p(-2*w,0),p(-w, hw)),   nw && not sw)
-          , {-11-} (l(p(-w,3*hw),p(0,w)),     sw)
-          , {-05-} (l(p(-w,hw),p(-w,3*hw)),   s && not sw)
+            {-13-} (l(p(0,0), p(0,1)), (sw&&se) || (not se && not sw && (n||s||nw||ne)))
+          , {-17-} (l(p(0,0), p(1,1)), se)
+          , {-18-} (l(p(0,1), p(1,1)), (n||nw||sw||ne)&&not s&&not se)
+          , {-19-} (l(p(0,1), p(1,2)), se)
+          , {-21-} (l(p(1,0), p(1,1)), (n||s||sw||nw)&&not se&&not ne)
+          , {-22-} (l(p(1,1), p(1,2)), s && not se)
+          , {-23-} (l(p(1,0), p(2,1)), se)
+          , {-24-} (l(p(1,1), p(2,1)), ne && not se)
           ]
+
+inSE, inN, inSW :: Point' -> Point
+inSE Point{..} = Point { x = x *: w
+                       , y = (2 * y - x) *: hw
+                       }
+inN Point{..}  = Point { x = (y - x) *: w
+                       , y = (-x -y) *: hw
+                       }
+inSW Point{..} = Point { x = -y *: w
+                       , y = (2 * x - y) *: hw
+                       }
+
+render :: (Point' -> Point) -> Line' -> Line
+render f = fmap f
+
+boundaries'' :: SummitBeams Bool -> [Line]
+boundaries'' sb =
+  let se = render inSE <$> boundaries' sb
+      n  = render inN  <$> boundaries' (rotateBeams sb)
+      sw = render inSW <$> boundaries' (rotateBeams $ rotateBeams sb)
+  in  se <> n <> sw
+
+rotateBeams :: SummitBeams a -> SummitBeams a
+rotateBeams SummitBeams{..} =
+  SummitBeams { n  = sw
+              , ne = nw
+              , se = n
+              , s  = ne
+              , sw = se
+              , nw = s
+              }
 
 toSouth :: Point -> Point
 toSouth = (<> Point 0 ww)
@@ -177,9 +201,9 @@ getTriangle :: TriangleBeams Bool
             -> [Line]
 getTriangle beams north south east =
   let beamsLines = getBeamsLines beams
-      northBoundaries = boundaries north
-      southBoundaries = move toSouth <$> boundaries south
-      eastBoundaries = move toEast <$> boundaries east
+      northBoundaries = boundaries'' north
+      southBoundaries = move toSouth <$> boundaries'' south
+      eastBoundaries = move toEast <$> boundaries'' east
   in join [beamsLines, northBoundaries, southBoundaries, eastBoundaries]
 
 readBeams :: Int -> TriangleBeams Bool
@@ -294,12 +318,3 @@ data Mode = Full | Random deriving Read
 genMatrix :: Mode -> Int -> Int -> IO [[Int]]
 genMatrix Full w h = pure . replicate h . replicate w $ 7
 genMatrix Random w h = traverse (const $ traverse (const $ randomRIO (0,7)) [1..w]) [1..h]
-
-renderPattern :: [Line]
-renderPattern =
-  let bs = boundaries' $ SummitBeams False False True True False False
-      center = move (<> p(ww, ww))
-   in center <$> bs
-              -- <> (move rotate <$> bs)
-              <> (move (rotate . rotate) <$> bs)
-
