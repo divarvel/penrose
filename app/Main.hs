@@ -20,6 +20,7 @@ main :: IO ()
 main = do
   args <- getArgs
   let cmd = case args of
+              []           -> Left ()
               ["server"]   -> Left ()
               [mode, w, h] -> Right (read mode, read w, read h)
               _            -> error "`server` or `Full 10 10` or `Random 10 10`"
